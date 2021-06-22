@@ -52,7 +52,6 @@ nnCostFunction <- function(nn.params,input.layer.size, hidden.layer.size, num.la
   # FEED FORWARD PROPAGATION
   
   a1 <- X
-  
   Z2 <- a1 %*% t(Theta1)
   a2 <- sig(Z2)
   a2 <- cbind(ones(nrow(a2),1),a2)
@@ -71,9 +70,6 @@ nnCostFunction <- function(nn.params,input.layer.size, hidden.layer.size, num.la
   
   yVec <- YVEC(num.labels,y)
   
-  
-  #H is a 15167 x 1 vector
-  #y is a 15167 x 1
   
   temp1 <- (-yVec * log(H))
   
@@ -278,7 +274,6 @@ gradientDescent <- function(nn.params,input.layer.size, hidden.layer.size, num.l
   
   for(iter in 1:maxiter){
     J_grad <- nnCostFunction(nn.params,input.layer.size,hidden.layer.size,num.labels,X,y,lambda)
-    m <- nrow(X)
     J.History[iter] <- J_grad[[1]]
     grad <- J_grad[[2]]
     nn.params <- nn.params - (learn.rate * grad)
@@ -291,6 +286,55 @@ gradientDescent <- function(nn.params,input.layer.size, hidden.layer.size, num.l
   results <- list(J.History,nn.params)
   
   return(results)
+}
+
+stochasticGradientDescent <- function(nn.params,input.layer.size, hidden.layer.size, num.labels, X, y, lambda, maxiter, learn.rate){
+  
+  if(is.null(nrow(X))){
+    J.History <- zeros(maxiter,1)
+  }else{
+    J.History <- zeros(maxiter*nrow(X),1)
+  }
+  
+  count <- 1
+  w<-1
+  
+  avg.History <- NULL
+  
+  for(iter in 1:maxiter){ 
+    print(paste("Iteration: ",iter))
+    
+    dat <- cbind(y,X)
+    tmp <- sample(nrow(dat))
+    dat <- dat[tmp,]
+    
+    y <- as.matrix(dat[,1])
+    X <- as.matrix(dat[,-1])
+    
+    for(item in 1:nrow(X)){
+      J_grad <- nnCostFunction(nn.params,input.layer.size,hidden.layer.size,num.labels,X[item,],y[item,],lambda)
+      J.History[count] <- J_grad[[1]]
+      grad <- J_grad[[2]]
+      nn.params <- nn.params - (learn.rate * grad)
+      count <- count+1
+    }
+    
+    avg.History[iter] <- mean(J.History[w:count-1])
+    print(avg.History[iter])
+    if(iter %% 250 == 0){
+      plot(avg.History)
+
+    }
+    w <- count
+     
+  }
+  
+  
+  
+  results <- list(avg.History[maxiter-1],nn.params)
+  
+  return(results)
+  
 }
 
 nn.predict <- function(Theta1, Theta2, Theta3, X){
@@ -329,7 +373,7 @@ nn.predict <- function(Theta1, Theta2, Theta3, X){
 learningCurve <- function(X,y,Xval,yval,lambda,input.layer.size,num.labels,hidden.layer.size){
   
   m <- nrow(X)
-  step = 25
+  step = 1000
   
   length.Theta.1 <- (input.layer.size +1) * hidden.layer.size
   length.Theta.2 <- length.Theta.1 + ((hidden.layer.size+1)* hidden.layer.size)
@@ -350,7 +394,7 @@ learningCurve <- function(X,y,Xval,yval,lambda,input.layer.size,num.labels,hidde
   error_val <- zeros(m/step,1)
   i=1
   j=1
-  while(i <= m){
+  while(i <= (m/step)){
     
     print(i)
     print(j)
@@ -384,18 +428,98 @@ learningCurve <- function(X,y,Xval,yval,lambda,input.layer.size,num.labels,hidde
 
 getPolynomials <- function(data, degree){
   
-  out <- NULL
-  n <- ncol(data)
-  for(i in 1:n){
-    for(j in 2:degree){
-      poly <- data[,i]^j
-      out <- cbind(out,poly)
+  
+  
+  if(is.null(ncol(data))){
+    out <- NULL
+    for(i in 1:length(data)){
+      
+      for(j in 2:degree){
+        
+        poly <- data[i]^j
+        out <- append(out,poly)
+      }
     }
+  }else{
+    out <- NULL
+    n <- ncol(data)
+    for(i in 1:n){
+      for(j in 2:degree){
+        poly <- data[,i]^j
+        out <- cbind(out,poly)
+      }
+    }
+    
+    colnames(out) <- paste0('Poly', seq_along(colnames(out) =='poly'))
   }
   
-  colnames(out) <- paste0('Poly', seq_along(colnames(out) =='poly'))
+  
   
   
   return(out)
   
+}
+
+stochasticLearningCurve <- function(X,y,Xval,yval,lambda,input.layer.size,num.labels,hidden.layer.size,maxiter,learn.rate){
+  
+  m <- nrow(X)
+  step = 1000
+  
+  length.Theta.1 <- (input.layer.size +1) * hidden.layer.size
+  length.Theta.2 <- length.Theta.1 + ((hidden.layer.size+1)* hidden.layer.size)
+  length.Thete.3 <- length.Theta.2 + ((hidden.layer.size + 1) * num.labels)
+  
+  initial.Theta1 <- matrix(runif(1:length.Theta.1, min = -1, max = 1), nrow = hidden.layer.size, ncol = (input.layer.size +1))
+  initial.Theta2 <- matrix(runif(length.Theta.1:length.Theta.2, min = -1, max =1), nrow = hidden.layer.size, ncol = (hidden.layer.size+1))
+  initial.Theta3 <- matrix(runif(length.Theta.2:length.Thete.3, min = -1, max = 1), nrow = num.labels, ncol = (hidden.layer.size+1))
+  
+  initial.Theta1.Unrolled <- as.vector(initial.Theta1)
+  initial.Theta2.Unrolled <- as.vector(initial.Theta2)
+  initial.Theta3.Unrolled <- as.vector(initial.Theta3)
+  
+  nn.params <- c(initial.Theta1.Unrolled,initial.Theta2.Unrolled,initial.Theta3.Unrolled)
+  
+  
+  error_train <- zeros(m/step,1)
+  error_val <- zeros(m/step,1)
+  i=10
+  j=1
+  while(i <= (m/step)){
+    
+    print(i)
+    print(j)
+    
+    X_train = X[1:i,]
+    y_train = y[1:i,]
+    
+    J_grad <- stochasticGradientDescent(nn.params,input.layer.size, hidden.layer.size, num.labels, X_train, y_train, lambda, maxiter,learn.rate)
+    nn.params = J_grad[[2]]
+    
+    ert <- nnCostFunction(nn.params,input.layer.size, hidden.layer.size, num.labels, X_train,y_train,lambda)
+    error_train[j,] <- ert[[1]]
+    
+    erv <- nnCostFunction(nn.params,input.layer.size, hidden.layer.size, num.labels, Xval,yval,lambda)
+    error_val[j,] <- erv[[1]]
+    
+    i<- i+step
+    j<- j+1
+    
+  }
+  
+  library(ggplot2)
+  
+  errors <- as.data.frame(cbind(error_train,error_val))
+  x_er = 1:nrow(errors)
+  
+  pl <- ggplot() + geom_line(data = errors, aes(x= x_er, y= V1), color = 'red') + geom_line(data = errors, aes(x= x_er, y= V2), color = 'blue')
+  print(pl)
+}
+
+
+ReLU <- function(Z){
+  if(Z>0){
+    return(Z)
+  }else{
+    return(0)
+  }
 }
